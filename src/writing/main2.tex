@@ -1,0 +1,589 @@
+\documentclass[runningheads]{llncs}
+\usepackage{graphicx}
+
+\usepackage{csquotes}
+\usepackage{tikz}
+\input{figures-spec} %
+\usetikzlibrary{calc,positioning,spy}
+\usepackage{numprint}
+\usepackage[nolist]{acronym}
+\usepackage[hidelinks]{hyperref}
+\renewcommand\UrlFont{\color{blue}\rmfamily}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{cleveref}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{xfrac}
+\usepackage{microtype}
+\usepackage{enumitem}
+\usepackage{afterpage}
+
+\usepackage{xspace}
+\makeatletter
+\DeclareRobustCommand\onedot{\futurelet\@let@token\@onedot}
+\def\@onedot{\ifx\@let@token.\else.\null\fi\xspace}
+\def\etal{et~al\onedot}
+\def\eg{e.g\onedot,\xspace} 
+\def\ie{i.e\onedot,\xspace} 
+\def\etc{etc\onedot} 
+\def\vs{vs\onedot}
+\makeatother
+
+\usepackage{float}
+\newfloat{lstfloat}{htbp}{lop}
+\floatname{lstfloat}{\footnotesize \bfseries Listing}
+
+\usepackage[nolist]{acronym}
+\input{writing/lstset-typescript}
+
+\renewcommand\UrlFont{\color{blue}\rmfamily}
+
+\begin{document}
+\title{Visualization of Source Code Similarity using 2.5D Semantic Software Maps}
+\author{%
+    Daniel~Atzberger    \and
+    Tim~Cech            \and
+    Willy~Scheibel      \and\\ %
+    Daniel~Limberger    \and %
+    J{\"u}rgen~D{\"o}llner}
+\authorrunning{D. Atzberger et al.}
+\institute{Hasso Plattner Institute, Digital Engineering Faculty, University of Potsdam
+}
+
+\begin{acronym}
+\acro{AST}{Abstract Syntax Tree}
+\acro{ATM}{Author-Topic Model}
+\acro{DTM}{Developer-Topic Model}
+\acro{LDA}{Latent Dirichlet Allocation}
+\acro{LSI}{Latent Semantic Indexing}
+\acro{LOC}{Lines-of-Code}
+\acro{NLP}{Natural Language Processing}
+\acro{MBTI}{Myers-Briggs Type Indicator}
+\acro{MDS}{Multidimensional Scaling}
+\acro{MTM}{Multi-feature Topic Model}
+\acro{SE}{Software Engineering}
+\acro{BOW}{Bag-of-Words}
+\acro{TTM}{Tag-Topic Model}
+\acro{VCS}{Version Control System}
+\acro{SOM}{Self-Organizing Map}
+\end{acronym}
+
+\maketitle              %
+\begin{abstract}
+    For various program comprehension tasks, software visualization techniques can be beneficial by displaying aspects related to the behavior, structure, or evolution of software.
+    In many cases, the question is related to the semantics of the source code files, e.g., the localization of files that implement specific features or the detection of files with similar semantics.
+    This work presents a general software visualization technique for source code documents, which uses 3D glyphs placed on a two-dimensional reference plane. 
+    The relative positions of the glyphs captures their semantic relatedness.
+    Our layout originates from applying Latent Dirichlet Allocation and Multidimensional Scaling on the comments and identifier names found in the source code files.
+    Though different variants for 3D glyphs can be applied, we focus on cylinders, trees, and avatars.
+    We discuss various mappings of data associated with source code documents to the visual variables of 3D glyphs for selected use cases and provide details on our visualization system.
+\keywords{Source Code Mining \and Software Visualization \and Glyph Visualization.}
+\end{abstract}
+
+\section{Introduction}
+\label{sec:introduction}
+About 90\thinspace{}\% of the entire costs of a software project are related to the maintenance phase~\cite{Dehaghani2013WhichMore}, i.e., to prevent problems before they occur (preventive maintenance), correct faults (corrective maintenance), improve the functionality or performance (perfective maintenance), or adapt to a changing environment (adaptive maintenance)~\cite{IEEESTD2017SEVocabulary}.
+There are various visualization techniques to represent aspects related to the structure, the behavior, or the evolution of the underlying software, to assist users in program comprehension tasks during the maintenance phase.
+Nevertheless, since software has no intrinsic gestalt, software visualization uses suitable \emph{abstractions and metaphors} to depict aspects of and relations within software data to support and, at best, align users in their mental representation of selected software aspects.
+Interactive visualizations allow users to analyze a software project in an exploratory way and thus support finding information and gaining knowledge.
+Examples for well-established, interactive software visualization techniques are:
+\begin{itemize}
+	\item \emph{Icicle Plots} for representations of trace executions~\cite{Malony1991Traceview,Cornelissen2011PCthroughTraceVisualization},
+	\item \emph{Treemaps} depicting the hierarchical structure of software projects~\cite{scheibel2020-treemaptaxonomy,limberger2019-softwaremap},
+	\item \emph{Circular Bundle Views} illustrating relations, e.g., include dependencies~\cite{bundleview},
+	\item \emph{Software Cities} that reflect the development history of software~\cite{Steinbrueckner2010RepresentingDevelopmentHistory,steinbruckner2013-evolution}, and 
+	\item similar approaches based on cartographic metaphors~\cite{hawes2015-codesurveyor,kuhn2010software}.
+\end{itemize}
+
+Many specific questions in maintenance are related to the semantic structure of software projects.
+For example, in the case of perfective maintenance, source code files implementing a specific functionality or concept need to be identified.
+It is helpful to be aware of other files that share semantics in this context.
+Such tasks can become intensively time-consuming with long-lasting software systems and with an increasing number of different developers.
+In order to support such tasks, various layouts exist that can reflect semantic similarities between files, i.e., by placing files with a similar semantic closer to one another~\cite{kuhn2008consistentlayout,kuhn2010software,atzberger2021softwareforest,atzberger2021-softwaregalaxy}.
+Using 2D or 3D glyphs to represent files with a semantic positioning and additional data mapping, e.g., software metrics mapped to the glyphs' visual variables, facilitates the comprehension of the semantic structure of a software project.
+For the remainder of this work, we refer to the term \emph{glyphs} as defined by Ward \etal; \enquote{In the context of data and information visualization, a glyph is a visual representation of a piece of data or information where a graphical entity and its attributes are controlled by one or more data attributes}~\cite{ward2010interactive}.
+
+In this work, we present a general approach for placing custom 3D~glyphs in a 2D reference space for software visualization tasks, in order to (1) capture the semantic structure of source code files and (2) allow for an additional, inherent visual display of related data, e.g., software metrics.
+For our layout technique, we assume developer comments and deliberately chosen identifiers to not only provide instructions for compilers but to simultaneously document and communicate intent, function, and context to developers.
+This assumption motivates the use of techniques from the \ac{NLP} domain for mining the semantic structure of source code documents.
+We apply \ac{LDA}, a probabilistic topic model, to capture the semantic structure of a software structure, which leads to a mathematical description of source code files.
+By applying \ac{MDS} as a dimension reduction technique, we generate a two-dimensional layout that reflects the semantic relatedness between the source code files.
+We represent every source code unit or file as a single 3D~glyph.
+Though plenty of glyphs and metaphors have been applied to software visualization tasks, we focus our discussion on three examples we considered valuable:
+\begin{description}[itemindent = -4mm, leftmargin = 12mm]
+	\item[Cylinders] with their extent, height, and color as visual variables.
+	\item[Trees] with a variety of visual variables, e.g., size, type, leaf color, health, age, and season.
+	\item[Avatars] which can be easily distinguished from each other and clearly identified, e.g., for depicting software developers or teams.
+\end{description}
+We describe fitting use cases for every glyph and provide examples using popular Open Source projects data.
+\Cref{fig:Teaser} shows one exemplary result of our visualization approach.
+
+\begin{figure*}[t] %
+    \begin{tikzpicture}[figNS, spy using outlines = {style = spyRC, magnification = 1.8, size = 24mm}]
+        \node[figRC, anchor = center](fig0) at (0,0)
+            {\includegraphics[width = \textwidth, trim = 256 128 384 128, clip]{images/forest-02.jpg}};
+    \end{tikzpicture}\vspace{-1.5\baselineskip}
+    \caption{%
+        Example of a \emph{Software~Forest} using handcrafted tree models from \emph{SketchFab} (\href{https://sketchfab.com/}{sketchfab.com}) as 3D~glyphs. 
+        Each tree represents a source code file. 
+        Quantitative and qualitative data associated to the files can be mapped to age, type, and health of a tree.}
+    \label{fig:Teaser}
+\end{figure*}
+
+The remainder of this work is structured as follows:
+In \cref{sec:related} we review existing work related to our approach. We provide an overview of possible layouts for visualizing source code and glyphs and natural metaphors in the software visualization domain.
+In \Cref{sec:layout} we detail the layout approach, which is based on \ac{LDA} and \ac{MDS} and applied to comments and identifiers in source code.
+\Cref{sec:conceptvisualization} describes use case scenarios and shows how data related to the semantics of source code files can be represented.
+We further present a detailed explanation of our system and its implementation in \Cref{sec:implementation} and, finally,
+conclude this paper in \cref{sec:results} and present directions for future work.
+
+\section{Related Work}
+\label{sec:related}
+Our visualizations are created in two distinct steps.
+First, we generate a semantic layout that is then used for placing 3D glyphs (representing source code files).
+Second, we map quantitative and qualitative data of source code files to the available visual variables of the 3D glyphs.
+With respect to the prior art, we, therefore, focus on these two aspects.
+We describe existing approaches for placing documents in a reference space in order to reflect their semantic similarity and also describe existing 2.5D approaches based on treemaps for software visualization tasks.
+We then present relevant work on three widely used visualization metaphors, namely the island metaphor, the tree metaphor, and the city metaphor.
+Selected glyphs are presented at the end of this section.
+
+\paragraph{Semantic Layouts for Software Visualization.}
+When designing visualizations, one has to consider the placement of data items in the reference space.
+In the case of document visualization, we call a layout whose goal is to reflect the semantic relatedness between the data items a semantic layout.
+In a semantic layout, documents that share a common similarity are placed nearby each other.
+As documents are mostly viewed as \ac{BOW}, \ie the order of words within a document is neglected, and only their frequency is taken into account, dimension reduction techniques are used to project the high-dimensional points to a two-dimensional plane or a three-dimensional space.
+
+Skupin \etal proposed an approach for generating two-dimensional visualizations for text documents using cartographic metaphors~\cite{skupin2004worldofgeography}.
+The authors applied \ac{SOM} on the \ac{BOW}~\cite{kohonen1997som}, as dimension reduction technique, to place abstracts of publications about geography on the plane.
+Furthermore, dominant terms were displayed, thus showing the semantic content of the region in the visualization.
+
+Kuhn \etal were the first to propose a semantic layout for software visualization tasks~\cite{kuhn2008consistentlayout,kuhn2010software}.
+First, each source code file is considered as a single document and several preprocessing tasks are undertaken to remove noise from the vocabulary.
+Then, the high-dimensional \ac{BOW} is reduced in their dimension in two steps.
+The topic model \ac{LSI}~\cite{deerwester1990indexing} is applied, which describes each document through its expression in the latent topics within a software project, which can already be seen as a dimension reduction of the \ac{BOW}.
+After this, \ac{MDS}~\cite{cox2008multidimensional} is applied on the dissimilarity matrix that captures the pairwise dissimilarities of the documents using the cosine-similarity.
+The resulting two-dimensional scatterplot is then equipped with height lines, resulting in a cartographic visualization.
+In addition, two-dimensional glyphs are placed for displaying coding activities, \eg test tubes.
+
+Linstead \etal~\cite{linstead2007eclipseeeveloper,linstead09sourcerer} were the first to propose a semantic software layout based on \ac{LDA} and its variant, the \ac{ATM}, which additionally takes information about authorship into account~\cite{rosen-zvi2004authors}.
+By applying the topic models on the source code of the Eclipse project, both source code files and authors are described as distributions over latent topics.
+The final layout is computed by applying \ac{MDS} on the dissimilarity matrix, which contains the pairwise symmetrized Kullback-Leibler divergence of the authors or files.
+
+Another approach that models the semantic structure of source code files using \ac{LDA} for visualization tasks was presented by Atzberger \etal~\cite{atzberger2021softwareforest}.
+In their approach, the authors first apply \ac{MDS} on the topic-word distributions to compute two-dimensional vertices, representing the topics, as presented in~\cite{sievert2014ldavis}.
+The position of a document is then computed as a convex linear combination according to its document-topic distribution.
+Using this layout, the authors introduced the tree metaphor for software visualization, resulting in the so-called \emph{Software Forest}.
+In a later work, Atzberger \etal discussed the use of pawns and chess figures as 3D glyphs for visualizing the knowledge distribution across software development teams~\cite{atzberger2022-knowhowmap}.
+In this case, the layout reflects the semantic similarity between developers, additional information about the expertise of each developer can then be mapped on the visual variables of the representing glyph.
+
+In another work, Atzberger \etal applied their layout approach to a 3D reference space, creating a stylized scatter plot for the depiction of software projects~\cite{atzberger2021-softwaregalaxy}.
+Inspired by a metaphor introduced by Lanza \etal~\cite{lanza2001evolutionmatrix}, the authors displayed each source code file as a star, thereby creating a \emph{Software Galaxy}.
+The authors also introduced transparent volumetric nebulae to make use of the metaphor of galactic star clusters or nebulae.
+Attributes such as cluster density or distribution can subsequently be mapped to the nebulaes' intensities and colors.
+
+\paragraph{The Island Metaphor.} 
+The 2.5D approach used by Atzberger allows for the integration of a terrain (based on a dynamically generated heightfield), resulting in visualizations resembling islands.
+Indeed the island metaphor is a widely used visualization metaphor in the Software Visualization domain.
+\u{S}t\u{e}p\'{a}nek developed \textit{Helveg}, a framework for visualizing C\# code as islands, based on a graph-drawing algorithm layout~\cite{stepanek2020-landscapesthesis}.
+Their approach also uses 3D glyphs, \eg bridges representing dependencies and trees depicting classes, for visualizing the structure of a project.
+\emph{CodeSurveyor} is another approach that makes use on the cartographic metaphor~\cite{hawes2015-codesurveyor}.
+Based on a hierarchical graph layout algorithm, files are positioned in a 2D reference plane and are aggregated to states, countries, or continents according to the architectural structure of the software project.
+\emph{CodeSurveyor} shares characterisitcs of treemaps that use non-rectangular shapes~\cite{scheibel2020-treemap-layout-algorithms}.
+Schreiber \etal proposed \emph{ISLANDVIZ}, another approach using the island metaphor.
+It enables users to interactively explore a software system in virtual reality and augmented reality alike~\cite{schreiber2018-islandmetaphor}.
+
+\paragraph{Treemap Layouts.}
+Another widely used class of layout algorithms in the software visualization domain are \emph{Treemaps}.
+Treemaps are inherently capable of reflecting the typically hierarchical structure of software projects~\cite{scheibel2020-treemaptaxonomy,scheibel2020-treemap-layout-algorithms}.
+Given their 2D layout, they can be extended into the third dimension, thus resulting in a 2.5D visualization.
+Besides height, color, and texture 2.5D treemaps offer additional visual variables for additional information display~\cite{limberger2019-softwaremap,limberger2021-procedural,limberger2020-uncertainty}.
+An approach that refer to natural phenomena, \eg fire or rain, for visualizing software evolution in a 2.5D treemap was proposed by W{\"u}rfel et~al.~\cite{wurfel2015natural}.
+It is worth mentioning that the class of treemap algorithms includes a large number of shapes other than just rectangles or Voronoi cells~\cite{scheibel2020-treemaptaxonomy}.
+
+\paragraph{The Tree Metaphor.}
+In our considerations, we use the tree metaphor since trees offer a variety of visual variables.
+Kleiner and Hartigan were the first to propose a mapping of multivariate data to a 2D tree~\cite{kleiner1981representing}.
+Based on hierarchical clustering of variables, for each data point, the geometry of each tree, i.e., the thickness of a branch, the angle between branches, and their orientation, is derived from the data attributes.
+Erra presented an approach to visualize object-oriented systems using the tree metaphor, thus resulting in a forest~\cite{Erra2012CodeTrees,Erra2012ForestMetaphor}.
+For every revision each file is depicted as a tree, whose visual variables reflect properties of the source code, \ie software metrics, in a predefined way.
+Later Atzberger \etal applied the tree metaphor for software visualization tasks~\cite{atzberger2021softwareforest}.
+The main difference between Atzberger \etal and Erra \etal is the placement of the trees in the reference plane.
+The approach of Atzberger \etal is not restricted to the case of object-oriented programming languages, as it only uses the natural language in source code.
+Furthermore, the system of Atzberger \etal allows users to specify custom mappings of data and visual attributes.
+The authors do not focus on rendering realistic trees but rather apply handcrafted models for their approach.
+Kleiberg \etal use the tree metaphor for visualizing an entire set of hierarchically structured data.
+This approach differs from most other approaches because each tree does not represent a single document~\cite{kleiberg2001botanical}.
+
+\paragraph{The City Metaphor.} 
+This metaphor is probably the most popular use of 3D glyphs in the software visualization domain.
+In their approach \emph{CodeCity}, Wettel and Lanza applied a city metaphor for exploring object-oriented software projects using a 2.5D visualization, referring to real-world cities~\cite{Wettel2007SoftwareCities,Wettel2008CodeCity}.
+Each class is represented by a building and packages are grouped into districts that are placed according to a modified treemap algorithm.
+By mapping software metrics onto the visual variables of the cuboids, \eg its height and the size of the base, a user can get an overview of the structure of a project.
+Steinbrückner adopted the idea of the city metaphor and introduced a novel layout approach, based on a hierarchical street system, that captures a project development over time~\cite{Steinbrueckner2010RepresentingDevelopmentHistory,steinbruckner2013-evolution}.
+
+\paragraph{Other Approaches.}
+Beck proposed a mapping between software metrics of object-oriented software projects and geometric properties of figurative feathers, \eg its size, shape, and texture~\cite{beck2014-feathers}.
+Their approach \emph{Software Feathers} is intended to support developers in getting a first overview of a software project and to deticting interesting code entities.
+Fernandez \etal extended an approach by Lewis \etal~\cite{Lewis2004VisualIDs}, that generates 2D glyphs in order to identify classes with the same dependencies and similar set of methods~\cite{Fernandez2016Glyphbased}.
+Chuah and Eick proposed the three glyph visualizations \textit{InfoBUG}, \textit{Time-wheel}, and \textit{3D-wheel} for the task of visualizing project-oriented software data~\cite{Chuah1997GlyphsSoftwareVisualization}.
+
+\section{Glyph Placement in a 2D Reference Space}
+\label{sec:layout}
+According to Ward \etal there are three general strategies for placing glyphs~\cite{ward2010interactive}:
+\begin{description}
+    \item [1. uniform] All glyphs are placed in equidistant positions.
+    \item [2. structure-driven] The positions of the glyphs arise from the structure of the data set, \eg a hierarchy or graph structure within the data.
+    \item [3. data-driven] The positions of the glyphs are determined by a set of data attributes.
+\end{description}
+In this section, we present the layout approach presented by Atzberger \etal~\cite{atzberger2021softwareforest}. 
+In a semantic layout, the relative position between two points on the 2D reference plane should reflect the semantic relatedness between the corresponding data points, \ie source code files of a software project.
+For this, the assumption is made that the semantic similarity between source code files is reflected in a shared vocabulary and can therefore be captured using techniques from the \ac{NLP} domain.
+The approach for placing 3D glyphs on a plane has three stages.
+First, the source code files of a software project are preprocessed to get rid of words that carry no semantic information.
+In the second step \ac{LDA} is applied to the corpus of preprocessed documents to model each source code file as a high-dimensional vector.
+Lastly, in the third step, \ac{MDS} is applied to reduce the vectors in their dimensionality.
+
+\subsection{Data Preprocessing}
+In our considerations each source code file of a project is viewed as a single document, the set of all documents is called the corpus, and the set of all words in the corpus forms the vocabulary.
+We neglect the ordering of the words within a document and only store their frequencies in the so-called term-document-matrix.
+In order to remove words from the vocabulary that carry no semantic information, \eg stopwords of the natural language, it is necessary to perform several preprocessing steps before applying topic models.
+Moreover, source code often follows naming conventions, \eg the Camel Case convention, thus requiring additional preprocessing steps~\cite{chen2016survey}.
+In our experiments, the following sequence of preprocessing steps has turned out to produce a usable vocabulary~\cite{atzberger2021softwareforest}.
+
+\begin{description}
+    \item [1. Removal of Non-text Symbols:] All special characters such as dots and semicolons are replaced with white spaces to avoid accidental connection of words not meant to be combined.
+    This includes the splitting of identifier names, e.g., the word \emph{foo.bar} gets split into \emph{foo} and \emph{bar}.
+    \item [2. Split of Words:] Identifiers are split according to delimiters and the Camel Case convention, e.g., \emph{FooBar} is split into \emph{foo} and \emph{bar}, and stripped from redundant white space subsequently. 
+    \item [3. Removal of Stop Words:] Stop words based on natural language and programming language keywords are removed as they carry no semantic content. Additionally, we filter the input based on a hand-crafted list comprising domain-specific stop words, e.g., data types and type abstractions.
+    \item [4. Lemmatization:] To avoid grammatical diversions, all words are reduced to their basic form, e.g., \emph{said} and \emph{saying} are reduced to \emph{say}.
+\end{description}
+After applying the four preprocessing steps, we store each document as a \ac{BOW}.
+For the remainder of this paper, we refer to a documents' \ac{BOW} after preprocessing as a document.
+
+\subsection{Latent Dirichlet Allocation on Source Code}
+Topic models are a widely used class of techniques for investigating collections of documents, \eg for knowledge comprehension or classification tasks~\cite{aggarwal2012mining}.
+For software engineering tasks, \ac{LDA} proposed by Blei \etal~\cite{blei2003latent}, is the most common technique~\cite{chen2016survey}.
+Assuming a set of documents $\mathcal{D} = \{d_1, \dots, d_m\}$, the so-called \textsl{corpus}, \ac{LDA} extracts latent topics $\varphi_1, \dots, \varphi_K$, underlying the corpus, where the number of topics $K$ is a hyperparameter of the model. 
+As topics are given as multinomial distributions over the vocabulary $\mathcal{V}$, which contains the terms of the corpus $\mathcal{D}$, the \enquote{concept} underlying a topic, in most cases can be derived from its most probable words.
+\Cref{tab:topics_bitcoin} shows an example for three topics with their ten most probable words extracted from the Bitcoin project~\cite{atzberger2021softwareforest}.
+From the most probable words, we suggest that topic \#1 deals with the internal logic of cryptocurrency.
+Words like \enquote{thread}, \enquote{time}, \enquote{queue}, and \enquote{callback} are related to the general concept of parallel processing in C++, and topic \#3 is concerned about the UI.
+
+\afterpage{
+\addtocounter{footnote}{-1}
+\begin{table}[t]
+    \footnotesize
+    \centering
+	\setlength{\tabcolsep}{12.0pt}%
+	\renewcommand{\arraystretch}{1.05}
+    \caption{Three exemplary topics extracted from \emph{Bitcoin Core}\protect\footnotemark{} source code with $K = 50$ and the Dirichlet priors set to their default values.}
+    \label{tab:topics_bitcoin}
+    \begin{tabular}{cc|cc|cc}
+    \toprule
+    \multicolumn{2}{c|}{\textbf{Topic \#1}} & \multicolumn{2}{c|}{\textbf{Topic \#2}} & \multicolumn{2}{c}{\textbf{Topic \#3}} \\% \midrule
+    \textbf{Term} & \textbf{Prob.} &
+    \textbf{Term} & \textbf{Prob.} & \textbf{Term} & \textbf{Prob.}\\ \midrule
+        std & 0.070 & thread & 0.132 & address & 0.115 \\
+        transaction & 0.031 & time & 0.070 & model & 0.108 \\
+        fee & 0.027 & queue & 0.064 & table & 0.065 \\
+        tx & 0.026 & std & 0.054 & label & 0.051\\
+        ban & 0.024 & callback & 0.040 & qt & 0.033\\
+        str & 0.023 & run & 0.037 & index & 0.030 \\
+        handler & 0.016 & call & 0.025 & dialog & 0.024 \\
+        output & 0.016 & mutex & 0.021 & column & 0.024\\
+        bitcoin & 0.015 & scheduler & 0.020 & ui & 0.021 \\
+        reason & 0.015 & wait & 0.018 & role & 0.019 \\
+    \bottomrule
+    \end{tabular}
+\end{table}
+\footnotetext{Source code taken from \href{https://github.com/bitcoin/bitcoin}{github.com/bitcoin/bitcoin}}
+}
+
+Besides the topics, \ac{LDA} learns representations $\theta_1, \dots, \theta_m$ of the documents as distributions over the topics.
+The distributions $\theta_1, \dots, \theta_m$ therefore capture the semantic structure of the documents and allow a comparison between them on a semantic level.
+\ac{LDA} makes the assumption of an underlying generative process, which is given by
+
+\begin{enumerate}
+    \item For each document $d$ in the corpus $\mathcal{D}$ choose a distribution over topics $\theta \sim \text{Dirichlet}(\alpha)$
+    \item For each word $w$ in $d$
+    \begin{enumerate}
+        \item Choose a topic $z \sim \text{Multinomial}(\theta)$
+        \item Choose the word $w$ according to the probability $p(w \vert z, \beta)$
+    \end{enumerate}
+\end{enumerate}
+
+The parameter $\alpha = (\alpha_1, \dots, \alpha_K)$, where $0 < \alpha_i$ for all $1 \le i \le K$, is the Dirichlet prior for the document-topic distribution.
+Its meaning is best understood, when written as the product $\alpha = a_c \cdot m$ of its concentration parameter $a_c \in \mathbb{R}$ and its base measure $m=(m_1, \dots, m_k)$, whose components sum up to 1.
+The case of a base measure $m = (\sfrac{1}{K}, \dots, \sfrac{1}{K})$ is denoted as symmetrical Dirichlet prior.
+For small values of $a_c$, the Dirichlet distribution would favor points in the simplex that are close to one edge, \ie \ac{LDA} would try to describe a document with a minimum of topics.
+The larger the value of $a_c$ the more likely that $\ac{LDA}$ is to fit all topics a non-zero probability for a document.
+Analogous, those considerations hold true for the Dirichlet prior $\beta = (\beta_1, \dots, \beta_N)$, $0 < \beta_i$ for $1\le i \le N$ for the topic-term distribution, where $N$ denotes the size of the vocabulary $\mathcal{V}$.
+
+Since inference for \ac{LDA} is intractable, approximation techniques need to be taken into account~\cite{blei2003latent}.
+Among the most widely used are Collapsed Gibbs Sampling (CGS)~\cite{Griffiths2004FindingTopics}, Variational Bayes (VB)~\cite{blei2003latent}, and its online version (OVB)~\cite{Hoffman2010OnlineLDA}.
+
+\subsection{Multidimensional Scaling}
+\ac{LDA} applied on the source code files leads to a description of each document as a high-dimensional vector, whose components represent the expression in the respective topic.
+Therefore using a similarity measure, \eg the Jensen-Shannon divergence, two documents can be compared on a semantic level, thus forming structures, \eg clusters and outliers, in the set of all documents.
+Linstead \etal used this notion of similarity and applied the dimension reduction \ac{MDS} on the documents to generate a two-dimensional layout.
+However, this approach implicitly assumes that all extracted topics are \enquote{equally different} to each other and neglects the fact that the topics, viewed as distributions over the vocabulary, can be compared among each other themselves.
+The layout approach by Atzberger \etal addresses this issue and applies the dimension reduction technique \ac{MDS} on the topics $\varphi_1, \dots, \varphi_K$, which can be compared to each other using the Jensen-Shannon distance~\cite{sievert2014ldavis,atzberger2021softwareforest}.
+This results in points $\bar{\varphi}_1, \dots, \bar{\varphi}_K \in \mathbb{R}^2$, whose Euclidean distance reflects the Jensen-Shannon-distance of the high-dimensional topics.
+A document $d$, given by its document-topic distribution $\theta = (\theta^{(1)}, \dots, \theta^{(K)})$, is then represented as the convex linear combination $\bar{d}$, precisely
+\begin{align}
+    \bar{d} = \sum \limits_{j=1}^{K} \theta^{(j)} \bar{\phi}_j.
+\end{align}
+A document with a strong expression in a topic is subsequently placed next to that topic, taking the similarity of topics into account.
+
+\section{Visual Attributes of 3D Glyphs and Use Cases}
+\label{sec:conceptvisualization}
+In \autoref{sec:related}, we summarized popular visualization metaphors based on 3D glyphs in the Software Visualization domain.
+In this section, we review (1) the city metaphor and (2) the forest metaphor together with (3) the island metaphor.
+We categorize our visualization as $\mathcal{A}^3 \oplus \mathcal{R}^2$, \ie three-dimensional primitives placed on a two-dimensional reference space pl~\cite{atzberger2021softwareforest,duebel2014-2d3drepresentation}.
+We further present a novel idea of placing avatars into the visualization, thus indicating developer activities.
+
+\subsection{City Metaphor}
+The city metaphor, as proposed by Wettel \etal, owes its name its visual similarity to modern cities, caused by displaying software files as cuboids~\cite{Wettel2007SoftwareCities}.
+The motivation for choosing this metaphor was to support a user navigating through a software system by adopting a well-known metaphor from everyday life.
+All existing approaches rely on a layout that captures the hierarchical structure of a software project, thus focusing on the architectural aspect of a project.
+Therefore, the approaches do not support program comprehension tasks related to the underlying semantic concepts of a software project.
+One advantage of the city metaphor is that they offer various visual variables.
+Examples proposed in the literature are:
+\begin{itemize}
+    \item Wettel \etal mapped the number of methods to height and the number of attributes to the cuboids' horizontal extent~\cite{Wettel2007SoftwareCities}.
+    \item Steinbrückner \etal used stacked cylinders, where each cylinder displays the coding activity of a single developer made on a file~\cite{steinbruckner2013-evolution}.
+    \item Limberger \etal present various advanced visual variables, \eg sketchiness or transparency, for cuboids that can be applied for the city metaphor~\cite{limberger2019-softwaremap}.
+    Recently, Limberger \etal investigated the use of animations for displaying the evolution of source code artifacts measured between two revisions~\cite{limberger2021-procedural}.
+\end{itemize}
+We adapt the idea of the city metaphor in our considerations by representing each file of a software project as a cylinder.
+\Cref{fig:Visualization_CityMetaphor_2} shows a simple example for the project \textit{globjects}, where the height and the color of the cylinders are used as visual variables.
+The height of the cylinder displays the \ac{LOC} of the respective file, thus revealing the impact of underlying concepts for the software project.
+The color displays the percentage of commented lines in the respective file using a sequential color scheme, which allows drawing conclusions about the code quality in relation to a concept.
+In most cases, large files are grouped nearby each other, thus indicating their underlying concepts seem to have a large impact on the size of the project in terms of \ac{LOC}.
+Furthermore, large files often harbor the risk of non-sufficient documentation in the form of comments.
+This observation could motivate the project maintainer to focus on that concept, distributed over the individual files, in a future refactoring process.
+
+\afterpage{
+\addtocounter{footnote}{-1}
+\begin{figure*}[t] %
+    \begin{tikzpicture}[figNS, spy using outlines = {style = spyRC, magnification = 2.0, size = 32mm}]
+        \node[figRC, anchor = center](fig0) at (0,0)
+            {\includegraphics[width = \textwidth, trim = 384 288 0 192, clip]{images/Visualization_CityMetaphor_2_gamma.png}};
+        \spy on ($(fig0.center)+(-9mm, +4mm)$) in node at ($(fig0.west)+(+20mm,-14mm)$);
+    \end{tikzpicture}\vspace{-1.5\baselineskip}
+    \caption{%
+        Example for cylinders placed on a 2D reference plane. Each cylinder represents a single source code file of the project \emph{globjects}\protect\footnotemark{}. The height displays the \ac{LOC} of each file, and the color the percentage of commented lines.}
+    \label{fig:Visualization_CityMetaphor_2}
+\end{figure*}
+\footnotetext{Source code taken from \href{https://github.com/cginternals/globjects}{https://github.com/cginternals/globjects}}
+}
+
+\subsection{Forest Metaphor}
+As shown in \autoref{sec:related}, the idea of forest islands is two widely used metaphors in the Software Visualization domain, especially as they offer a grouping of files according to some \enquote{relatedness}.
+Furthermore, islands and forests are real-world structures, thus making them suitable for creating a mental map for the user to support program comprehension tasks.
+Our presentation here follows the preceding work of Atzberger \etal closely~\cite{atzberger2021softwareforest}.
+We focus our discussion to the following set of visual variables:
+\begin{itemize}
+    \item The tree height, \eg for depicting the size of a file in terms of \ac{LOC}. 
+    \item The color of the tree crown, \eg displaying software metrics related to the quality or complexity of the respective file.
+    \item The tree type, \eg to distinguish the source code files by their file endings.
+    \item The health status of a tree, \eg for displaying failed tests.
+    \item Chopped trees, \eg for visualizing deleted files.
+\end{itemize}
+\Cref{fig:glyph_atlas} shows two sets of tree glyphs and demonstrates the visual attributes they inherit~\cite{atzberger2021softwareforest}.
+
+\begin{figure*}[t] %
+    \begin{tikzpicture}[figNS, spy using outlines = {style = spyRC, magnification = 1.8, size = 24mm}]
+        \node[figRC, anchor = center](fig0) at (0,0)
+            {\includegraphics[width = \textwidth, trim = 0 0 0 0, clip]{images/forest-meshes-hand-painted.jpg}};
+    \end{tikzpicture}\vspace{-1.5\baselineskip}
+    \caption{%
+        Examples of two sets of tree glyphs: the top row inherits the visual variables size, color, and health status. The bottom row shows trees of different types. Both models were purchased on \emph{SketchFab}: \enquote{HandPainted Pine Pack} by ZugZug and \enquote{Low Poly Nature Pack} by NONE.}
+    \label{fig:glyph_atlas}
+\end{figure*}
+
+When visualizing a software project using the tree metaphor, we first compute the position of each file as presented in section \ref{sec:layout}, \ie each file is represented as a single tree, thus forming an entire forest.
+Then for each point, the value of a height field is computed as presented in~\cite{kuhn2010software}.
+This has the effect that dense regions are placed on higher ground than regions with fewer trees, but still assuring that single trees stand on a terrain of $30\% - 50 \%$ of the maximal height.
+Furthermore, we integrated the possibility to configure the water height, which can be seen as a height filtering technique.
+
+\begin{figure}[t] %
+    \begin{tikzpicture}[figNS, spy using outlines = {style = spyRC, magnification = 2.0, width = 56mm, height=36mm }]
+        \node[figRC, anchor = center](fig0) at (0,0)
+            {\includegraphics[width = 0.8\textwidth, trim = 256 16 96 0, clip]{images/forest-tooltip-v2.jpg}};
+        \spy on ($(fig0.center)+(-0.5mm, +4mm)$) in node at ($(fig0.east)+(-28mm + 0.2\textwidth,-14mm)$);
+    \end{tikzpicture}\vspace{-1.5\baselineskip}
+    \caption{%
+        Software Forest of the \emph{notepad-plus-plus} project. The tooltip shows the underlying topic distribution of the file represented by the selected tree (highlighted). 
+        All trees with the same dominant topic are highlighted.}
+    \label{fig:forest-tooltip-v2}
+\end{figure}
+
+\Cref{fig:forest-tooltip-v2} shows the result of applying our approach on the \textit{notepad-plus-plus} project\footnote{Source code taken from  \href{https://github.com/notepad-plus-plus/notepad-plus-plus}{https://github.com/notepad-plus-plus/notepad-plus-plus}} based on the set of pine trees shown in \Cref{fig:glyph_atlas}.
+The underlying visual mapping aimed to represent the document-topic distribution of each file.
+The tree type is chosen according to the main topic of each file, \ie the topic that has the highest probability in the file, \eg documents with the main topic \enquote{User Interface Code} are displayed as green pine trees.
+All trees of the same color are highlighted when hovering over a tree.
+Here we want to mention that we manually labeled the topics for the project by examining their most probable words.
+In general, this is a time-consuming task that needs to be done manually~\cite{markovtsev2017topic}.
+
+\begin{figure*}[t] %
+    \begin{tikzpicture}[figNS, spy using outlines = {style = spyRC, magnification = 2.0, size = 32mm}]
+        \node[figRC, anchor = center](fig0) at (0,0)
+            {\includegraphics[width = \textwidth, trim = 0 0 0 0, clip]{images/Visualization_TreeMetaphor_1_gamma.png}};
+        \spy on ($(fig0.center)+(-7mm, -5mm)$) in node at ($(fig0.east)+(-20mm,-31mm)$);
+    \end{tikzpicture}\vspace{-1.5\baselineskip}
+    \caption{%
+        Part of the Software Forest for the bitcoin project.}
+    \label{fig:forest bitcoin}
+\end{figure*}
+
+Our next application demonstrates the use of Software Forest for the bitcoin project\footnotemark[1].
+In \Cref{sec:layout} we showed three interesting topics extracted from the source code by applying \ac{LDA} with $K=50$ topics and default values for the Dirichlet priors.
+We map the topic with the highest impact for a document onto the tree type. 
+As the number of tree types is usually limited, this visualization approach does not scale for a large number of topics.
+The bitcoin project is mainly written in C++, C, and Python.
+We ignore the other source code files and map the programming language onto the color of the tree.
+The height of the tree captures the \ac{LOC} for the respective file (\Cref{fig:forest bitcoin}).
+
+\begin{figure*}[t] %
+    \begin{tikzpicture}[figNS, spy using outlines = {style = spyRC, magnification = 1.5, size = 32mm}]
+        \node[figRC, anchor = center](fig0) at (0,0)
+            {\includegraphics[width = \textwidth, trim = 8 8 0 4, clip]{images/Visualization_People2.PNG}};
+    \end{tikzpicture}\vspace{-1.5\baselineskip}
+    \caption{%
+        Examples using avatars positioned in relation to their coding activities.}
+    \label{fig:People}
+\end{figure*}
+
+\subsection{Developer Avatars}
+Our last visualization metaphor uses 3D glyphs displaying people for showing coding activities within a software project.
+Each developer or team is assigned an avatar whose position shows the source code contributed to within a given timespan.
+One question that could be addressed with this visualization would be the assignment of suitable developers when a bug related to a concept or a file would occur.
+\Cref{fig:People} shows an example for placing avatars and cylinders on an island for the example of the \textit{globjects} project.
+The color of the cylinders displays a complexity metric, whereas each figure represents a single developer.
+The avatars are placed nearby the file on which they contributed the most.
+The large red cylinder indicates a considerable risk in a file, as its complexity is very high.
+Moreover, we can deduce from the visualization that an avatar next to a cylinder might have the required knowledge to maintain or review the risk.
+
+In our example, each team member can choose among a set of given figures, which he would favor as a representation, however the idea of mapping data to glyphs displaying developers has been presented by Atzberger \etal for the task of displaying data related to the skills and expertise of developers~\cite{atzberger2022-knowhowmap}.
+However when using human-looking glyphs for displaying developer related data, various visual attributes become critical and should be considered very carefully.
+One idea to overcome this issue, would be the use of abstract forms, which only reminds on human faces, as initially presented as the popular Chernoff faces~\cite{chernoff1973use}.
+
+\section{System Design and Implementation Details}
+\label{sec:implementation}
+In this section, we present implementation details with respect to the layout computation and the rendering of our visualization prototype, \ie the tools and libraries we choose for generating a 2D layout based on the vocabulary in the source code files and the visualization mapping and rendering, respectively.
+We further describe the supported interaction techniques for enabling a user to explore a software project.
+We use a separation of the layout computation and the interactive rendering component, where the layout computation component computes a visualization dataset from a source code repository that is used as an input of the rendering component (see \Cref{fig:pipeline}).
+
+\begin{figure}[t]
+    \includegraphics[width=1.0\linewidth]{images/datapipeline.pdf}\vspace{-1.5\baselineskip}
+    \caption{The data processing pipeline to compute the semantic layouts. The rendering component composes the layouts and glyph atlases based on the visual mapping.}
+    \label{fig:pipeline}
+\end{figure}
+
+\begin{lstfloat}[t]
+    \caption{\footnotesize An example JSON configuration of a mapping from attribute values to 3D model. Two types of glyph categories are defined, namely \enquote{Cylinder} and \enquote{People}. This configuration can be used to display source code files as cylinders and developers as people-looking glyphs in the same semantic software map.}
+    \lstinputlisting[language=TypeScript,label={lst:JSON}]{listings/PeopleCylinders2.json}\vspace{-0.6\baselineskip}
+\end{lstfloat}
+
+\subsection{Layout Computation}
+Our approach follows the implementation presented by Atzberger \etal in their earlier work about the Software Forest~\cite{atzberger2021softwareforest}.
+For preprocessing, the natural language in the source code documents, we apply the \textit{nltk}\footnote{\href{https://www.nltk.org/}{https://www.nltk.org/}} library for obtaining a list of stopwords for the English language.
+We further use \textit{spacy}\footnote{\href{https://spacy.io/}{https://spacy.io/}} for lemmatization.
+We used the \ac{LDA} implementation provided by the library \textit{Gensim}\footnote{\href{https://radimrehurek.com/gensim/}{https://radimrehurek.com/gensim/}}.
+\textit{Gensim} offers an \ac{LDA} implementation based on the original implementation by Blei et al.~\cite{blei2003latent} as well as its online version introduced by Hofman et al.~\cite{Hoffman2010OnlineLDA}.
+The implementation of \ac{MDS} is taken from the Machine learning library \textit{scikit-learn}\footnote{\href{https://scikit-learn.org/stable/}{https://scikit-learn.org/stable/}}.
+The result of the layout computation is a 2D layout that is merged with other static source code metrics into a CSV file that is later used for input to the rendering component.
+
+\subsection{Rendering}
+The rendering component is an extension to a scatter plot renderer, written written in \textit{TypeScript} and \textit{WebGL}~\cite{wagner2020-scatterplot}.
+The main dependency is the open-source framework \textit{webgl-operate}\footnote{\href{https://webgl-operate.org/}{https://webgl-operate.org/}}, which handles canvas and WebGL context management, as well as labeling primitives and glTF scene loading and rendering.
+The 3D glyph models are integrated into the rendering component by means of a glyph atlas and a configuration file.
+The basic designs for our more advanced visualization metaphors, \ie trees and people, are taken from \textit{SketchFab}\footnote{\href{https://sketchfab.com/feed}{https://sketchfab.com/feed}}.
+The 3D glyph atlases are constructed manually using \textit{Blender}\footnote{\href{https://www.blender.org/}{https://www.blender.org/}}, but every other 3D editor with glTF is a feasible alternative.
+Together with a glyph atlas, we have to specify its objects within a \textit{JSON} configuration file (an example is given in Listing 1). %
+This rendering component is embedded into a Web page with further GUI elements for the visual mapping and direct interaction techniques on the canvas to support navigation in the semantic software map.
+
+\subsection{User Interaction}
+As basic interaction techniques, a user can choose mappings from data to visual variables of the selected glyphs, navigate through the 2.5D visualization, and retrieve details on demand displayed by tooltips by rotating and zooming.
+\Cref{fig:System_UI} shows the user interface of our web-based implementation prototype.
+Our system supports basic interaction techniques, \eg rotating and zoom.
+Furthermore, a tooltip displaying the entire entries of the respective data point contained in the CSV file shows up.
+As our approach highly depends on \ac{LDA}, we highlight all trees with the same dominant topic as the selected one when hovering over it.
+Furthermore, our system allows the user to define a custom mapping between data columns and the visual variables provided by the selected model.
+For each model, we ensure that at least the type, the height, and the color are available as visual metaphors.
+By adjusting the effect of the variable tree size, which depends on a data attribute, the user can further interactively explore the effect of data variables for the source code files.
+In order to enhance the rendering with visual cues and more fidelity, the user can modify rendering details, \eg by toggling Anti-Aliasing or soft shadows.
+
+\begin{figure*}[th!] %
+    \begin{tikzpicture}[figNS, spy using outlines = {style = spyRC, magnification = 1.5, size = 32mm}]
+        \node[figRC, anchor = center](fig0) at (0,0)
+            {\includegraphics[width = \textwidth, trim = 96 0 0 40, clip]{images/System_UI2.PNG}};
+    \end{tikzpicture}\vspace{-1.5\baselineskip}
+    \caption{%
+        User interface of our web-based implementation. Besides the full mapping configuration, rendering parameters can be adjusted by the user.}
+    \label{fig:System_UI}
+\end{figure*}
+
+\section{Conclusion}
+\label{sec:results}
+\subsection{Discussion}
+Software Visualization techniques support users in program comprehension tasks by displaying images based on data related to software artifacts.
+In many cases, the questions are about the semantics of a software project, e.g., for locating concepts or functionalities in the source code.
+Our previous work used a tree metaphor and a semantic layout to create map-like visualizations to support users in program comprehension tasks related to the semantics.
+In this extended work, we detailed how the topic model \ac{LDA} and the dimension reduction technique \ac{MDS} are applied for generating a layout for capturing the semantic relatedness between source code files.
+We presented mappings between quantitative and qualitative aspects of source code files, e.g., source code metrics or file types, and visual variables of selected 3D glyphs for concrete program comprehension tasks.
+We applied the city, the forest, and the island metaphor for our use-cases.
+Our web-based visualization can visualize large data sets and provides a significant degree of freedom to the user by supporting various interaction techniques.
+
+Though \ac{LDA} has shown great success in modeling the concepts inherent in a software project~\cite{maskeri2008mining}, the possibility of visual indication of misleading or irrelevant relations must not be neglected.
+For example, the positioning of a document in 2D is not unique as it arises from a convex linear combination of the reduced topic-word distributions.
+Therefore, two documents with totally different document-topic distributions may be placed next to one another.
+In practice, however, the choice of the Dirichlet prior $\alpha$ forces \ac{LDA} to favor document-topic distributions with only a few topics.
+
+For our experiments, we created visualizations for the two Open Source projects \emph{globjects} and \emph{bitcoin}.
+Both can be seen as representatives for mid-sized software projects.
+However, a software visualization should also provide insights into large projects as the need for program comprehension increases with project size.
+\Cref{fig:tensorflow} shows a 2.5D visualization for the Machine Learning framework \textit{TensorFlow}\footnote{Source code taken from \href{https://github.com/tensorflow/tensorflow}{https://github.com/tensorflow/tensorflow}}
+that comprises a total of 13\,154 files, where each file is represented by a cylinder with the same visual mapping as presented in \Cref{sec:conceptvisualization}.
+The data volume makes it difficult to maintain interactive framerates on average machines.
+Though the island (without glyphs) is a map-like visualization in itself, its capabilities are limited, as its number of visual variables is limited.
+
+\begin{figure*}[t] %
+    \begin{tikzpicture}[figNS, spy using outlines = {style = spyRC, magnification = 2.5, size = 32mm}]
+        \node[figRC, anchor = center](fig0) at (0,0)
+            {\includegraphics[width = \textwidth, trim = 0 8 0 0, clip]{images/tensorflow-overflow.png}};
+        \spy on ($(fig0.center)+(+2mm, +6mm)$) in node at ($(fig0.east)+(-20mm,-16mm)$);
+    \end{tikzpicture}\vspace{-1.5\baselineskip}
+    \caption{%
+        Visualization of the tensorflow dataset using cylinders. The dataset contains 13\,154 files, which shows the limitation in discernible data items of our technique.}
+    \label{fig:tensorflow}
+\end{figure*}
+
+Our visual mappings were motivated by common questions in a software development process.
+However, we do not provide empirical measurements, \eg provided by a user study, that would demonstrate the actual benefit of our visualizations for users.
+It is yet unclear whether the choice of visual variables and glyphs is appropriate for users in real-world settings.
+The ideas presented in \Cref{sec:conceptvisualization} so far only provide a starting point for future investigations.
+Nevertheless, the given examples of map configurations indicate that our 2.5D software visualization is suitable for depicting aspects of and relations within software data, supports finding information and gaining knowledge, and possibly synchronizes the mental representation of selected software aspects with the actual data.
+
+\subsection{Future Work}
+Concerning our visualization approach, various possibilities for future work exist. 
+Most importantly, the effectiveness of our approach and the visual mappings should be evaluated in a systematic user study, e.g., to identify visual mappings best-suited for program comprehension tasks in an industrial setting with developers and project managers.
+Furthermore, we can imagine including more advanced visual mappings, especially in the case of the city metaphor~\cite{limberger2019-softwaremap}.
+
+Our glyph placement strategy is an example of a data-driven approach~\cite{ward2002taxonomy} for that distortion techniques should be considered.
+Our examples indicate that an increased glyph height tends to increase visual clutter.
+Therefore, distortion strategies as presented in~\cite{ward2002taxonomy} seem well-suited for mitigation.
+A modern approach for removing distortion in 2.5D visualizations was presented in~\cite{vollmer20202} and should be applicable for our case.
+Furthermore, quality metrics associated with the results of dimension reduction techniques can help measure whether the dimension reduction was able to capture local and global structures within a dataset.
+As our visualization approach mainly builds upon the semantic layout, we plan to implement a feature in our framework that generates the layout for a given software project automatically by evaluating various dimension reduction techniques with respect to selected quality metrics, as presented in~\cite{espadoto2021dimensionreduction}.
+
+\section*{Acknowledgements}
+This work is part of the \enquote{Software-DNA} project, which is funded by the European Regional Development Fund (ERDF or EFRE in German) and the State of Brandenburg (ILB). 
+This work is part of the KMU project \enquote{KnowhowAnalyzer} (Förderkennzeichen 01IS20088B), which is funded by the German Ministry for Education and Research (Bundesministerium für Bildung und Forschung).
+We further thank the students Maximilian Söchting and Merlin de la Haye for their work during their master's project at the Hasso Plattner Institute during the summer term 2020.
+
+\bibliographystyle{splncs04}
+\bibliography{bibliography}
+
+\end{document}

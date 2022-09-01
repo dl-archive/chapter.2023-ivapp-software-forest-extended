@@ -1,0 +1,25 @@
+{
+  "modelFile": "PeopleCylinders2.glb",
+  "attributes": [ "color" ],
+  "modelScale": 1.0,
+  "types": [
+    { "name": "Cylinder",
+      "baseModel": "Cylinder_Ax.001",
+      "variants": [
+        { "name": "Cylinder_Ax.001", "color": 1.0 },
+        { "name": "Cylinder_Ax.002", "color": 0.75 },
+        { "name": "Cylinder_Ax.003", "color": 0.5 },
+        { "name": "Cylinder_Ax.004", "color": 0.25 },
+        { "name": "Cylinder_Ax.005", "color": 0.0 }
+      ]
+    },
+    { "name": "People",
+      "baseModel": "Person0",
+      "variants": [
+        { "name": "Person0", "color": 1.0 },
+        { "name": "Person1", "color": 0.5 },
+        { "name": "Person2", "color": 0.0 }
+      ]
+    }
+  ]
+}
