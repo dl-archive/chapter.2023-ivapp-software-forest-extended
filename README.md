@@ -4,7 +4,7 @@ Daniel Atzberger, [Tim Cech](https://orcid.org/0000-0001-8688-2419), [Willy Sche
 
 *VISIGRAPP 2021: Computer Vision, Imaging and Computer Graphics Theory and Applications*. Springer, 2023, pp. 162–182.
 
-[![Version of record: 10.1007/978-3-031-25477-2_8](https://img.shields.io/badge/Version_of_record-10.1007%2F978--3--031--25477--2__8-007ec6)](https://doi.org/10.1007/978-3-031-25477-2_8) [![Author's version: 10.5281/zenodo.24122131](https://img.shields.io/badge/Author%27s_version-10.5281%2Fzenodo.24122131-007ec6)](https://doi.org/10.5281/zenodo.24122131) · [ResearchGate](https://www.researchgate.net/publication/363175014)
+[![Version of record: 10.1007/978-3-031-25477-2_8](https://img.shields.io/badge/Version_of_record-10.1007%2F978--3--031--25477--2__8-007ec6)](https://doi.org/10.1007/978-3-031-25477-2_8) [![Author's version: 10.5281/zenodo.24122131](https://img.shields.io/badge/Author%27s_version-10.5281%2Fzenodo.24122131-007ec6)](https://doi.org/10.5281/zenodo.24122131) [![ResearchGate](https://img.shields.io/badge/ResearchGate-publication-00CCBB?logo=researchgate&logoColor=white)](https://www.researchgate.net/publication/363175014)
 
 Extended version of [Software Forest](https://github.com/dl-archive/article.2021-ivapp-software-forest) (IVAPP 2021), published in the revised selected papers of VISIGRAPP 2021 (Communications in Computer and Information Science, vol. 1691).
 
